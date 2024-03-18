@@ -1,0 +1,368 @@
+---
+title: "Boston Project"
+author: "Luke Austin"
+date: "2024-03-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+The MASS package contains a data set called Boston which records median house value (medv) for 506 neighborhoods around Boston. We will seek to predict median house value using 13 predictors.
+
+Start by visually inspecting the data to get an idea of relationships that might be present
+```{r}
+#load the data
+library(MASS)
+library(ggplot2)
+#Part a
+library(GGally)
+ggpairs(Boston, axisLabels = "none")
+#make plots and describe
+```
+
+There seems to be a potential negative correlation between mean distance to employment centers (dis) and factors such as non-retail business acres per town (indus) and nitrogen oxide concentration (nox), which makes sense. Going with that, there seems to be a positive correlation between indus and nox factors. Proportion of residential land zones for lots (zn) seems to have a lot of relationships with other factors. There seems to be a negative correlation between zn and indus and zn and nox as well, a positive correlation with dis, and a negative correlation with lstat. Additionally, most interactions have patterns that are harder to distinguish. Some have gaps, such as rad or chas with the other factors, and others seem to be non-linear or maybe just a difference that we can't account for very well, such as crim with tax or ptratio, whose plots form almost a right angle, leaving most of the plot empty. Still others, such as ptratio and age, are very clearly entirely random.
+
+
+Fit classification models in order to predict whether a given suburb has a crime rate above or below the median (use the code below). Make sure to not include crime rate as a predictor. Explore logistic regression, LDA, and KNN models using various subsets of the predictors. 
+```{r}
+library(class)
+set.seed(10) # reproducible
+# create training and testing data
+trn_samples <- sample(1:dim(Boston)[1], 440, replace=FALSE)
+training_Boston <- Boston[trn_samples,]
+testing_Boston <- Boston[-trn_samples,]
+# create a response variable
+training_Boston$crimMedian <- training_Boston$crim > median(training_Boston$crim)
+testing_Boston$crimMedian <- testing_Boston$crim > median(training_Boston$crim)
+
+#Logistic Regression Exploration
+#Start by fitting a model with everything
+boston.glm1<- glm(crimMedian~ . -crim, family = "binomial", 
+                  data= training_Boston)
+#View summary to understand significance of factors
+summary(boston.glm1)
+#Check testing and training accuracy at 0.5 level
+#prediction training accuracy
+(acc.train.glm1 <- table(pred = predict(boston.glm1, 
+                                        type = "response") > 0.5, 
+                    true = training_Boston$crimMedian))
+(acc.train.glm1[1, 1] + acc.train.glm1[2, 2])/sum(acc.train.glm1)
+#Prediction test accuracy
+(acc.test.glm1 <- table(pred = predict(boston.glm1, 
+                                       newdata= testing_Boston, 
+                                       type = "response") > 0.5, 
+                        true = testing_Boston$crimMedian))
+(acc.test.glm1[1, 1] + acc.test.glm1[2, 2])/sum(acc.test.glm1)
+#training is 90.68% accurate, testing is 90.91% accurate
+#Remake model with less predictors, only those with 2 stars of significance (top 5 predictors)
+boston.glm2<- glm(crimMedian~ nox + dis + rad + ptratio + black, 
+                  family = "binomial", data= training_Boston)
+#View summary to understand significance of factors
+summary(boston.glm2)
+#Check testing and training accuracy at 0.5 level
+#prediction training accuracy
+(acc.train.glm2 <- table(pred = predict(boston.glm2, 
+                                        type = "response") > 0.5, 
+                    true = training_Boston$crimMedian))
+(acc.train.glm2[1, 1] + acc.train.glm2[2, 2])/sum(acc.train.glm2)
+#Prediction test accuracy
+(acc.test.glm2 <- table(pred = predict(boston.glm2, 
+                                       newdata= testing_Boston, 
+                                       type = "response") > 0.5, 
+                        true = testing_Boston$crimMedian))
+(acc.test.glm2[1, 1] + acc.test.glm2[2, 2])/sum(acc.test.glm2)
+#Training is 87.5% accurate, testing is 87.88% accurate
+#Although our model gets simpler with less predictors, the accuracy does decrease.
+#What if we alter the threshold for accuracy?
+#prediction training accuracy
+(acc.train.glm2.1 <- table(pred = predict(boston.glm2, 
+                                        type = "response") > 0.4, 
+                    true = training_Boston$crimMedian))
+(acc.train.glm2.1[1, 1] + acc.train.glm2.1[2, 2])/sum(acc.train.glm2.1)
+#Prediction test accuracy
+(acc.test.glm2.1 <- table(pred = predict(boston.glm2, 
+                                       newdata= testing_Boston, 
+                                       type = "response") > 0.4, 
+                        true = testing_Boston$crimMedian))
+(acc.test.glm2.1[1, 1] + acc.test.glm2.1[2, 2])/sum(acc.test.glm2.1)
+#Training accuracy up to 88.86% and testing accuracy is up to 90.91%!
+#Would lowering the threshold any more make things even better?
+#prediction training accuracy
+(acc.train.glm2.2 <- table(pred = predict(boston.glm2, 
+                                        type = "response") > 0.3, 
+                    true = training_Boston$crimMedian))
+(acc.train.glm2.2[1, 1] + acc.train.glm2.2[2, 2])/sum(acc.train.glm2.2)
+#Prediction test accuracy
+(acc.test.glm2.2 <- table(pred = predict(boston.glm2, 
+                                       newdata= testing_Boston, 
+                                       type = "response") > 0.3, 
+                        true = testing_Boston$crimMedian))
+(acc.test.glm2.2[1, 1] + acc.test.glm2.2[2, 2])/sum(acc.test.glm2.2)
+#Training accuracy is lower, but test accuracy is the same.
+
+#LDA Exploration
+#Once again, start with a model that accounts for everything
+boston.lda1<- lda(crimMedian~ . - crim, data = training_Boston)
+#Prediction training accuracy using confusion matrix
+(conf.train_lda1<- table(pred=predict(boston.lda1)$class, 
+                        true=training_Boston$crimMedian))
+(conf.train_lda1[1, 1] + conf.train_lda1[2, 2])/sum(conf.train_lda1)
+#Prediction test accuracy using confusion matrix
+(conf.test_lda1 <- table(pred = predict(boston.lda1, 
+                                        newdata = testing_Boston)$class,
+                        true = testing_Boston$crimMedian))
+(conf.test_lda1[1, 1] + conf.test_lda1[2, 2])/sum(conf.test_lda1)
+#Training accuracy is 85.68%, testing accuracy is 80.3%
+#Try reducing the number of predictors
+boston.lda2<- lda(crimMedian~ nox + dis + rad + ptratio + black, 
+                  data= training_Boston)
+#Prediction training accuracy using confusion matrix
+(conf.train_lda2<- table(pred=predict(boston.lda2)$class, 
+                        true=training_Boston$crimMedian))
+(conf.train_lda2[1, 1] + conf.train_lda2[2, 2])/sum(conf.train_lda2)
+#Prediction test accuracy using confusion matrix
+(conf.test_lda2<- table(pred = predict(boston.lda2, 
+                                        newdata = testing_Boston)$class,
+                        true = testing_Boston$crimMedian))
+(conf.test_lda2[1, 1] + conf.test_lda2[2, 2])/sum(conf.test_lda2)
+#Training data accuracy is 85% and testing is up to 81.82%
+#Try a third model using even less predictors, only nox and rad, based on the significance from our second linear model.
+boston.lda3<- lda(crimMedian~ nox + rad, data= training_Boston)
+#Prediction training accuracy using confusion matrix
+(conf.train_lda3<- table(pred=predict(boston.lda3)$class, 
+                        true=training_Boston$crimMedian))
+(conf.train_lda3[1, 1] + conf.train_lda3[2, 2])/sum(conf.train_lda3)
+#Prediction test accuracy using confusion matrix
+(conf.test_lda3<- table(pred = predict(boston.lda3, 
+                                        newdata = testing_Boston)$class,
+                        true = testing_Boston$crimMedian))
+(conf.test_lda3[1, 1] + conf.test_lda3[2, 2])/sum(conf.test_lda3)
+#This gives the same results as the previous model, but uses less predictors, so we may want to consider it.
+#These are not as accurate as our logistic regression model
+#Regardless of the number of predictors. Let's move on to KNN
+
+#KNN Exploration
+#Before we do anything, we need to standardize the predictors 
+#we will be using by using the scale function for training and test data
+#Train data
+training_Boston$nox<- scale(training_Boston$nox)
+training_Boston$dis<- scale(training_Boston$dis)
+training_Boston$rad<- scale(training_Boston$rad)
+training_Boston$ptratio<- scale(training_Boston$ptratio)
+training_Boston$black<- scale(training_Boston$black)
+#Test data
+testing_Boston$nox<- scale(testing_Boston$nox)
+testing_Boston$dis<- scale(testing_Boston$dis)
+testing_Boston$rad<- scale(testing_Boston$rad)
+testing_Boston$ptratio<- scale(testing_Boston$ptratio)
+testing_Boston$black<- scale(testing_Boston$black)
+#For our first model, let's compare accuracy using k=1 for different 
+#Sets of predictors, then we will compare different k values
+boston.knn.1<- knn(training_Boston[, c("nox", "dis", "rad", "ptratio",
+                  "black")], testing_Boston[, c("nox", "dis", "rad", 
+                                                "ptratio", "black")],
+                  training_Boston$crimMedian, k=1)
+#Find testing accuracy using confusion matrix
+(conf_bknn.1<- table(pred= boston.knn.1, true= 
+                             testing_Boston$crimMedian))
+(conf_bknn.1[1, 1] + conf_bknn.1[2, 2])/sum(conf_bknn.1)
+#92.42% Testing accuracy. That's impressive! 
+#Try with less predictors to compare
+boston.knn.2<- knn(training_Boston[, c("nox", "rad")], 
+                   testing_Boston[, c("nox", "rad")],
+                  training_Boston$crimMedian, k=1)
+#Find testing accuracy using confusion matrix
+(conf_bknn.2<- table(pred= boston.knn.2, true= 
+                             testing_Boston$crimMedian))
+(conf_bknn.2[1, 1] + conf_bknn.2[2, 2])/sum(conf_bknn.2)
+#Testing accuracy all the way up  98.48%, very impressive!
+#Let's try this with k=5 and k=10 as well
+#k=5
+boston.knn.2.5<- knn(training_Boston[, c("nox", "rad")], 
+                   testing_Boston[, c("nox", "rad")],
+                  training_Boston$crimMedian, k=5)
+#Find testing accuracy using confusion matrix
+(conf_bknn.2.5<- table(pred= boston.knn.2.5, true= 
+                             testing_Boston$crimMedian))
+(conf_bknn.2.5[1, 1] + conf_bknn.2.5[2, 2])/sum(conf_bknn.2.5)
+#96.97% accuracy, very good but not as good as k=1
+#k=10
+boston.knn.2.10<- knn(training_Boston[, c("nox", "rad")], 
+                   testing_Boston[, c("nox", "rad")],
+                  training_Boston$crimMedian, k=10)
+#Find testing accuracy using confusion matrix
+(conf_bknn.2.10<- table(pred= boston.knn.2.10, true= 
+                             testing_Boston$crimMedian))
+(conf_bknn.2.10[1, 1] + conf_bknn.2.10[2, 2])/sum(conf_bknn.2.10)
+#Also 96.97% testing accuracy.
+
+#See discussion/description of findings below.
+```
+When we evaluated the Boston data with logistic regression, we noticed our training and testing accuracy decreased with less predictors at the 0.5 threshold. However, once we lowered that threshold to 0.4, the test accuracy was back up to 90.91%, the same as the initial test accuracy for our first model. The test accuracy remained the same for a 0.3 threshold. In these cases, the training accuracy was lower than the test accuracy. When we used LDA, we discovered that models had higher training accuracy than test accuracy, but all models had lower test accuracy than the logistic regression model. Still, the LDA model improved as we lowered the number of predictors, even having nearly 82% test accuracy with only two predictors(nox and rad, which were significant according to our logistic regression). This was the same testing accuracy as it had for 5 predictors (nox, dis, rad, ptratio, and black, which we found were significant from logistic regression), so we are able to have the benefit of a simpler model in this case. KNN, however, was by far the best fit. Based on our previous work, we compared KNN models with the same set 5 predictors and 2 predictors at k=1, both yielding higher test accuracies than the other models. The highest was with 2 predictors, which gave 98.48% accuracy, correctly predicting 65 of the 66 test data values. We compared k=1 with k=5 and k=10, and although both still yielded approximately 97% test accuracy, the k=1 KNN model with "nox" and "rad" predictors yielded the best results.
+
+
+We will now try to predict per capita crime rate in the ‘Boston’ data set from using regression methods as the lasso, ridge regression, and PCR. Present and discuss results for the approaches that you consider.
+```{r}
+library(MASS)
+library(glmnet)
+head(Boston)
+#scale predictors accordingly
+Boston$zn<- scale(Boston$zn)
+Boston$indus<- scale(Boston$indus)
+Boston$chas<- scale(Boston$chas)
+Boston$nox<- scale(Boston$nox)
+Boston$rm<- scale(Boston$rm)
+Boston$age<- scale(Boston$age)
+Boston$dis<- scale(Boston$dis)
+Boston$rad<- scale(Boston$rad)
+Boston$tax<- scale(Boston$tax)
+Boston$ptratio<- scale(Boston$ptratio)
+Boston$black<- scale(Boston$black)
+Boston$lstat<- scale(Boston$black)
+Boston$medv<- scale(Boston$medv)
+#set seed for replicability
+set.seed(577)
+#Start with a ridge regression
+crim <- Boston$crim
+xmat <- data.matrix(Boston[, -1])
+ridgeOut2 <- glmnet(x = xmat, y = crim, family = "gaussian", alpha = 0, 
+                   nlambda = 200)
+#View plot, number predictors
+plot(ridgeOut2, label = T)
+
+#Also try with a LASSO regression
+lassoOut2 <- glmnet(x = xmat, y = crim, family = "gaussian", alpha = 1, 
+                   nlambda = 200)
+#View plot, number predictors
+plot(lassoOut2, label = T)
+
+#Now also try PCR
+library(pls)
+# 1. Fit the PCR model using the `pcr` command as done in the lab
+m0 <- pcr(crim ~ ., data = Boston, scale = TRUE, validation = "CV")
+# 2. Create a plot of the CV MSE (note root MSE is reported) vs. $M$.
+mse <- MSEP(m0)
+data.frame(M = mse$comps, mse = t(as.data.frame(mse$val))[, "CV"]) %>%
+  ggplot() +
+  geom_line(aes(M, mse)) +
+  geom_point(aes(M, mse)) +labs(title="Principle Components Regression Analysis", x= "Number of categories M")
+```
+- For the PCR method, we notice that MSE generally declines as M increases, declining a lot at first but more gradually at the end, with a minimum at M=12
+- once again, in lasso regression, the different predictors stay at 0 longer than at ridge regression, where they deviate from 0 (and each other) immediately.
+- the lasso and ridge regressions ultimately follow similar patters for the different predictors and their coefficients based on L1 norm, that is, by the highest L1 norm, if you were to "rank" the beta values of the predictors, they would be in the same order.
+- the highest predictor has a higher coefficient value at lower L1 norm values.
+
+Propose a model or a set of models that seem to perform well on this data set and justify your answer. Make sure to evaluate performance using CV error.
+```{r}
+#Ridge regression "best model"-justified by lowest CV MSE
+#Find the lambda with the lowest mean squared error from Cross validation
+cv.glmnet(xmat, crim, alpha=0, lambda = ridgeOut2$lambda)
+#Use the minimum lambda here to find the coefficients for the best 
+#(lowest CV MSE) model:
+#This is the model with lambda =0.54, which gives a MSE of 43.09
+ridgeOut.final<-glmnet(x = xmat, y = crim, family = "gaussian", 
+                       alpha = 0,  lambda = 0.54)
+
+#LASSO regression "best model" justified by lowest CV MSE
+#Find the lambda with the lowest mean squared error from Cross validation
+cv.glmnet(xmat, crim, alpha=1, lambda = lassoOut2$lambda)
+#Use the minimum lambda here to find the coefficients for the best 
+#(lowest CV MSE) model:
+#This is the model with lambda =0.54, which gives a MSE of 43.09
+lassoOut.final<-glmnet(x = xmat, y = crim, family = "gaussian", 
+                       alpha = 1,  lambda = 0.54)
+# Compare ridge and LASSO methods
+cbind(coef(ridgeOut.final), coef(lassoOut.final))
+#For PCR Method, When does the smallest cross-validation error occur? 
+#Which $M$ would you choose for your final model
+mse$comps[which.min(as.data.frame(mse$val)[1,])]
+#We would choose M=12, but what is the actual MSE?
+#The code for it was commented out because it was long and obnoxious.
+#mse$val
+```
+
+ - The ridge regression model above uses lambda= 0.54, which gives the minimum MSE of 43.71. It is validated by the minimum CV MSE. Looking at the coefficients, the proposed model uses all of the predictors, with rad as the biggest predictor (largest coefficient) of about 3.79, followed by medv of about -1.67 and dis if about -1.57.
+- The lasso regression model above uses lambda=0.025, which gives the minimum MSE as 42.99. It is validated by cross validation method and gives the lowest MSE for this approach. Looking at the coefficients, the proposed model uses dis, rad, black, lstat, and medv as the significant predictors. rad is the "biggest" predictor in this case as well, with a value of about 4.07, then medv with a value of approximately -0.99. 
+-These coefficient estimates vary from the coefficients for ridge regression in the actual estimated values, but they are both top predictors in each model
+-The ridge model has lower SE for the CV MSE estimate, but the lasso method has fewer predictors and a lower estimated CV MSE, so I personally am a fan of the LASSO model the most.
+- The PCR model is minimized at m=12 with a CV of 43.25 and adjusted CV of 43.1
+
+Does your chosen model involve all of the features in the data set? Why or why not?
+
+- the ridge model uses all of the predictors, but the lasso model only uses dis, black, rad, lstat, and medv, because the other predictors were not found to be significant at the lambda value with the optimum MSE obtained from cross validation.
+
+
+
+Finally, apply SVM to the dataset. Use at least three different kernels. Be sure to fit the models on a training set and to evaluate their performance on a test set. How accurate are the results compared to simple methods like linear or logistic regression? Which of these approaches yields the best performance?
+
+```{r}
+library(MASS)
+library(e1071)
+# create training and testing data- use 440 training obs, the rest will be test
+#Divide as we did in HW3 so we can compare to previous methods better.
+trn_samples <- sample(1:dim(Boston)[1], 440, replace=FALSE)
+training_Boston <- Boston[trn_samples,]
+testing_Boston <- Boston[-trn_samples,]
+#Create a binary variable that takes value 1 for crim rate above the median 
+#and 0 for crim rate below the median.
+training_Boston$crimMedian<- ifelse(training_Boston$crim 
+                                    >median(training_Boston$crim), 1,0)
+testing_Boston$crimMedian<- ifelse(testing_Boston$crim 
+                                   > median(training_Boston$crim), 1,0)
+#Now create new data, removing crim rate since we will be using crim median 
+training_Boston.new<- subset(training_Boston, select= -crim)
+testing_Boston.new<- subset(testing_Boston, select= -crim)
+
+#Apply SVM- check linear, polynomial, and radial kernels.
+#Because we are not printing the full dataset, we can look at several values
+#For 'cost', 'gamma', and 'degree' in each of these
+#Based on our knowledge, use the same values as the previous problem.
+#We will also use scale=TRUE to standardize predictors
+#Now that we've defined our approach, let's begin
+
+#Fit linear, radial, and polynomial SVM to train data
+SVM.linear<- tune(svm, crimMedian~., data = training_Boston.new, scale=TRUE,
+                  kernel= "linear", ranges = list(cost= seq(0.1, 3, 
+                                                            length= 10)))
+SVM.radial<- tune(svm, crimMedian~., data = training_Boston.new, scale=TRUE,
+                  kernel="radial", ranges = list
+                      (cost = seq(0.1, 3, length =10), 
+                        gamma = seq(0.001, 2, length = 5)))
+SVM.poly<- tune(svm, crimMedian~., data = training_Boston.new, scale=TRUE,
+                kernel= "polynomial", ranges = list
+                      (cost = seq(0.1, 3, length =10), 
+                        degree = seq(1, 5, length = 5)))
+
+#After running tuning, save the best model for each model type
+best.SVM.linear<- SVM.linear$best.model
+best.SVM.radial<- SVM.radial$best.model
+best.SVM.poly<- SVM.poly$best.model
+
+#Evaluate best models performances on test set- create confusion matrix and calculate error
+#linear
+SVM.lin.pred<- table(pred = predict(best.SVM.linear, 
+                                    newdata= testing_Boston.new, 
+                                    type = "response")>0.5, 
+                     true = testing_Boston.new$crimMedian)
+SVM.lin.pred
+(SVM.lin.pred[1,2] + SVM.lin.pred[2,1])/sum(SVM.lin.pred)
+#radial
+SVM.rad.pred<- table(pred = predict(best.SVM.radial, 
+                                    newdata= testing_Boston.new, 
+                                    type = "response")>0.5, 
+                     true = testing_Boston.new$crimMedian)
+SVM.rad.pred
+(SVM.rad.pred[1,2] + SVM.rad.pred[2,1])/sum(SVM.rad.pred)
+#polynomial
+SVM.poly.pred<- table(pred = predict(best.SVM.poly, 
+                                    newdata= testing_Boston.new, 
+                                    type = "response")>0.5, 
+                     true = testing_Boston.new$crimMedian)
+SVM.poly.pred
+(SVM.poly.pred[1,2] + SVM.poly.pred[2,1])/sum(SVM.poly.pred)
+```
+In this step, the Boston data set was used, divided into testing and training data and setting up a binary classifier based on the median crime rate. We approached the problem using scale=TRUE and all predictors, testing linear, radial, and polynomial kernels in our SVM with various values. Among these three SVM approaches, we find out that the radial kernel provides the best results for the test data, as it only misclassifies 3 of the 66 data points for 4.5% error. Polynomial had about 9.1% error and linear had 12.1% error. All of these were tested for numerous values of 'cost', 'gamma' and 'degree' depending on the situation. For the radial kernel SVM, the cost was 2.03 and gamma was 0.501. Back in homework 3, when working with the Boston dataset (training and testing and CrimMedian devised the same way), the best logistic regression we could devise had 9.09% error, which is not as good as our radial kernel SVM approach.
+
